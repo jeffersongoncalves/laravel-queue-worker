@@ -1,0 +1,6 @@
+{
+    "name": "acme/app-feature-1234",
+    "require": {
+        "php": "^8.2"
+    }
+}

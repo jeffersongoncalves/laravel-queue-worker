@@ -1,0 +1,4 @@
+#!/usr/bin/env php
+<?php
+
+// ponytail: fixture stand-in for a real environment's artisan file; never executed.
