@@ -123,7 +123,7 @@ Please see [CHANGELOG](CHANGELOG.md) for more information on what has changed re
 
 Please see [CONTRIBUTING](.github/CONTRIBUTING.md) for details.
 
-## Security
+## Security Vulnerabilities
 
 **This package is for internal, trusted review environments only.** It must never be exposed to the public internet and must never run in production. `allowed_root` and the token are the only things standing between an HTTP request and arbitrary process execution on the host running this package — treat both accordingly. Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
 
