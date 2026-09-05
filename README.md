@@ -1,3 +1,9 @@
+<div class="filament-hidden">
+
+![Laravel Queue Worker](https://raw.githubusercontent.com/jeffersongoncalves/laravel-queue-worker/main/art/jeffersongoncalves-laravel-queue-worker.png)
+
+</div>
+
 # Laravel Queue Worker
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/jeffersongoncalves/laravel-queue-worker.svg?style=flat-square)](https://packagist.org/packages/jeffersongoncalves/laravel-queue-worker)

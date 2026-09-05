@@ -1,0 +1,76 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A0A0B"/>
+      <stop offset="1" stop-color="#18181B"/>
+    </linearGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FBBF24"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FBBF24" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#FBBF24" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M 48 0 L 0 0 0 48" fill="none" stroke="#27272A" stroke-width="0.6"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.4"/>
+  <ellipse cx="950" cy="310" rx="410" ry="290" fill="url(#glow)"/>
+
+  <circle cx="80" cy="66" r="4" fill="#FBBF24"/>
+  <text x="102" y="71" font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="500" letter-spacing="2" fill="#A1A1AA">LARAVEL PACKAGE</text>
+
+  <text x="80" y="280" font-family="Inter, system-ui, sans-serif" font-size="62" font-weight="800" letter-spacing="-2" fill="#FAFAFA">Laravel Queue</text>
+  <text x="80" y="348" font-family="Inter, system-ui, sans-serif" font-size="62" font-weight="800" letter-spacing="-2" fill="#FAFAFA">Worker</text>
+
+  <text x="80" y="404" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="600" fill="#FBBF24">Runs jobs where the code lives</text>
+
+  <text x="80" y="444" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400" fill="#A1A1AA">Receives HTTP payloads from every environment</text>
+  <text x="80" y="468" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400" fill="#A1A1AA">and executes them there, tracked via Horizon.</text>
+
+  <!-- horizon dashboard mock -->
+  <rect x="680" y="160" width="420" height="330" rx="12" fill="#18181B" stroke="#27272A"/>
+
+  <text x="708" y="196" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" letter-spacing="2" fill="#71717A">HORIZON</text>
+  <rect x="932" y="182" width="128" height="24" rx="12" fill="#FBBF24" fill-opacity="0.12" stroke="#FBBF24"/>
+  <text x="996" y="198" text-anchor="middle" font-family="ui-monospace, monospace" font-size="12" fill="#FBBF24">env:app-feature-*</text>
+
+  <text x="708" y="248" font-family="Inter, system-ui, sans-serif" font-size="42" font-weight="800" fill="#FAFAFA">1,204</text>
+  <text x="708" y="270" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="500" fill="#71717A">jobs processed today</text>
+
+  <g>
+    <rect x="708" y="360" width="28" height="70" rx="4" fill="url(#amber)"/>
+    <rect x="748" y="330" width="28" height="100" rx="4" fill="url(#amber)"/>
+    <rect x="788" y="380" width="28" height="50" rx="4" fill="#3F3F46"/>
+    <rect x="828" y="350" width="28" height="80" rx="4" fill="url(#amber)"/>
+    <rect x="868" y="390" width="28" height="40" rx="4" fill="#3F3F46"/>
+    <rect x="908" y="340" width="28" height="90" rx="4" fill="url(#amber)"/>
+    <rect x="948" y="370" width="28" height="60" rx="4" fill="#3F3F46"/>
+    <rect x="988" y="320" width="28" height="110" rx="4" fill="url(#amber)"/>
+    <rect x="1028" y="360" width="28" height="70" rx="4" fill="#3F3F46"/>
+    <line x1="700" y1="430" x2="1064" y2="430" stroke="#27272A"/>
+  </g>
+
+  <text x="708" y="458" font-family="ui-monospace, monospace" font-size="13" fill="#10B981">✓ RunEnvironmentJob exit 0</text>
+
+  <!-- footer pills -->
+  <g font-family="Inter, system-ui, sans-serif" font-size="14" font-weight="500">
+    <rect x="80" y="545" width="90" height="30" rx="15" fill="#18181B" stroke="#27272A"/>
+    <text x="125" y="565" fill="#FAFAFA" text-anchor="middle">PHP 8.4</text>
+
+    <rect x="184" y="545" width="104" height="30" rx="15" fill="#18181B" stroke="#27272A"/>
+    <text x="236" y="565" fill="#FAFAFA" text-anchor="middle">Laravel 13</text>
+
+    <rect x="302" y="545" width="90" height="30" rx="15" fill="#18181B" stroke="#27272A"/>
+    <text x="347" y="565" fill="#FAFAFA" text-anchor="middle">Horizon</text>
+
+    <rect x="406" y="545" width="66" height="30" rx="15" fill="#18181B" stroke="#27272A"/>
+    <text x="439" y="565" fill="#FAFAFA" text-anchor="middle">MIT</text>
+  </g>
+
+  <text x="1120" y="595" text-anchor="end" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="500" fill="#52525B">@jeffersongoncalves</text>
+</svg>
