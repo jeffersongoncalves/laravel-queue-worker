@@ -29,7 +29,7 @@ class QueueWorkerServiceProvider extends PackageServiceProvider
 
         $this->app->bind(
             PathValidator::class,
-            fn (): PathValidator => new PathValidator(config('queue-worker.allowed_root')),
+            fn (): PathValidator => new PathValidator(config('queue-worker.allowed_root'), base_path()),
         );
     }
 }

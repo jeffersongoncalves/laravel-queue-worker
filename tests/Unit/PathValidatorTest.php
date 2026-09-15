@@ -41,6 +41,16 @@ it('rejects a directory with no artisan file', function (): void {
         ->toThrow(InvalidEnvironmentPathException::class);
 });
 
+it('rejects the hub own directory when the hub lives inside the allowed root', function (): void {
+    $validator = new PathValidator(
+        __DIR__.'/../Fixtures/environments',
+        __DIR__.'/../Fixtures/environments/app-feature-1234',
+    );
+
+    expect(fn () => $validator->resolve(__DIR__.'/../Fixtures/environments/app-feature-1234', 'app-feature-1234'))
+        ->toThrow(InvalidEnvironmentPathException::class);
+});
+
 it('rejects when the resolved basename does not match the slug', function (): void {
     $validator = new PathValidator(__DIR__.'/../Fixtures/environments');
 

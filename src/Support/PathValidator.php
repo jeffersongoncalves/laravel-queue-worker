@@ -10,12 +10,13 @@ class PathValidator
 {
     public function __construct(
         private readonly ?string $allowedRoot,
+        private readonly ?string $hubPath = null,
     ) {}
 
     /**
      * Resolve an untrusted environment path, guaranteeing it lives inside the
-     * configured allowed root, contains an "artisan" file, and that its
-     * basename matches the given slug.
+     * configured allowed root, contains an "artisan" file, that its basename
+     * matches the given slug, and that it is not this hub's own directory.
      *
      * @throws InvalidEnvironmentPathException
      */
@@ -53,6 +54,12 @@ class PathValidator
 
         if (basename($realPath) !== $slug) {
             throw new InvalidEnvironmentPathException("Path [{$path}] does not belong to slug [{$slug}].");
+        }
+
+        if ($this->hubPath !== null && $realPath === realpath($this->hubPath)) {
+            throw new InvalidEnvironmentPathException(
+                "Path [{$path}] is this hub's own directory, not a review environment. Deploy the hub outside [queue-worker.allowed_root]."
+            );
         }
 
         return $realPath;
