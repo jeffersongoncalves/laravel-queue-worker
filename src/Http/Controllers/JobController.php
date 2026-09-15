@@ -41,7 +41,11 @@ class JobController
             throw ValidationException::withMessages(['payload' => ['The payload is not valid JSON.']]);
         }
 
-        $queue = $data['queue'] ?? 'default';
+        $override = config('queue-worker.queue');
+
+        $queue = is_string($override) && $override !== ''
+            ? $override
+            : ($data['queue'] ?? 'default');
 
         RunEnvironmentJob::dispatch(
             slug: $data['slug'],

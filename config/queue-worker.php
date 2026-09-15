@@ -16,6 +16,13 @@ return [
      */
     'allowed_root' => env('QUEUE_WORKER_ALLOWED_ROOT'),
 
+    /*
+     * Forces every incoming job onto this hub-side queue, ignoring the queue
+     * name posted by the environment. Set it to a queue your Horizon
+     * supervisor actually watches. Left null, the posted name is used.
+     */
+    'queue' => env('QUEUE_WORKER_QUEUE'),
+
     'route_prefix' => env('QUEUE_WORKER_ROUTE_PREFIX', 'api'),
 
     'route_middleware' => ['api'],
