@@ -70,6 +70,42 @@ it('throws when the child process exits non-zero, letting the queue mark it fail
         ->toThrow(EnvironmentProcessFailedException::class);
 });
 
+it('includes the child stdout in the failure message, where Laravel renders the exception', function (): void {
+    Process::fake(['*' => Process::result(
+        output: 'RuntimeException: the real failure at /srv/environments/app-feature-1234/app/Jobs/Foo.php:42',
+        errorOutput: '',
+        exitCode: 1,
+    )]);
+
+    $job = makeEnvironmentJob();
+
+    expect(fn () => $job->handle(app(PhpBinaryResolver::class)))
+        ->toThrow(EnvironmentProcessFailedException::class, 'RuntimeException: the real failure');
+});
+
+it('truncates a huge child output instead of storing a whole stack trace', function (): void {
+    Process::fake(['*' => Process::result(
+        output: 'HEAD-MARKER'.str_repeat('x', 10000).'TAIL-MARKER',
+        errorOutput: '',
+        exitCode: 1,
+    )]);
+
+    $job = makeEnvironmentJob();
+
+    try {
+        $job->handle(app(PhpBinaryResolver::class));
+    } catch (EnvironmentProcessFailedException $exception) {
+        expect(mb_strlen($exception->getMessage()))->toBeLessThan(4500)
+            ->and($exception->getMessage())->toContain('HEAD-MARKER')
+            ->and($exception->getMessage())->toContain('TAIL-MARKER')
+            ->and($exception->getMessage())->toContain('[... truncated ...]');
+
+        return;
+    }
+
+    throw new Exception('The job did not fail.');
+});
+
 it('discards the job without throwing when the environment path no longer exists', function (): void {
     Process::fake();
 

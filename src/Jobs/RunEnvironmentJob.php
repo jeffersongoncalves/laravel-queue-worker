@@ -64,10 +64,32 @@ class RunEnvironmentJob implements ShouldQueue
         ]);
 
         if ($result->failed()) {
+            // Laravel renders the child's exception through its console handler,
+            // which writes to stdout, so errorOutput() alone is often empty.
+            $details = $this->truncate(trim($result->errorOutput()."\n".$result->output()));
+
             throw new EnvironmentProcessFailedException(
-                "Child process for environment [{$this->slug}] exited with code [{$result->exitCode()}]: {$result->errorOutput()}"
+                "Child process for environment [{$this->slug}] exited with code [{$result->exitCode()}]: {$details}"
             );
         }
+    }
+
+    /**
+     * A whole stack trace has no business in a failed_jobs row. Keep both
+     * ends: the head carries the rendered exception (class, message, file),
+     * the tail carries whatever the process died on last.
+     */
+    private function truncate(string $output): string
+    {
+        $limit = 4000;
+
+        if (mb_strlen($output) <= $limit) {
+            return $output;
+        }
+
+        $half = (int) ($limit / 2);
+
+        return mb_substr($output, 0, $half)."\n[... truncated ...]\n".mb_substr($output, -$half);
     }
 
     /**
