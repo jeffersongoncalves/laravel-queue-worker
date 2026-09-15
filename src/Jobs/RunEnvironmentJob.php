@@ -82,14 +82,15 @@ class RunEnvironmentJob implements ShouldQueue
     private function truncate(string $output): string
     {
         $limit = 4000;
+        $marker = "\n[... truncated ...]\n";
 
         if (mb_strlen($output) <= $limit) {
             return $output;
         }
 
-        $half = (int) ($limit / 2);
+        $half = intdiv($limit - mb_strlen($marker), 2);
 
-        return mb_substr($output, 0, $half)."\n[... truncated ...]\n".mb_substr($output, -$half);
+        return mb_substr($output, 0, $half).$marker.mb_substr($output, -$half);
     }
 
     /**

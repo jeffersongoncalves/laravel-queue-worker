@@ -95,7 +95,9 @@ it('truncates a huge child output instead of storing a whole stack trace', funct
     try {
         $job->handle(app(PhpBinaryResolver::class));
     } catch (EnvironmentProcessFailedException $exception) {
-        expect(mb_strlen($exception->getMessage()))->toBeLessThan(4500)
+        $details = mb_substr($exception->getMessage(), mb_strpos($exception->getMessage(), 'code [1]: ') + 10);
+
+        expect(mb_strlen($details))->toBeLessThanOrEqual(4000)
             ->and($exception->getMessage())->toContain('HEAD-MARKER')
             ->and($exception->getMessage())->toContain('TAIL-MARKER')
             ->and($exception->getMessage())->toContain('[... truncated ...]');
