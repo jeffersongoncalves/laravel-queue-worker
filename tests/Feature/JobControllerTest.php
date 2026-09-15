@@ -83,6 +83,22 @@ it('forces every job onto the configured queue, ignoring the posted queue name',
     );
 });
 
+it('rejects a request pointing at the hub own directory and never dispatches a job', function (): void {
+    Bus::fake();
+    // Hub deployed inside allowed_root: the container binding is what feeds
+    // base_path() to the validator, so resolve it through the app.
+    $this->app->setBasePath(queueWorkerEnvironmentPath());
+
+    $response = $this->postJson('/api/jobs', validJobRequest(), [
+        'X-Laravel-Queue-Token' => 'test-token',
+    ]);
+
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors('path');
+
+    Bus::assertNothingDispatched();
+});
+
 it('derives tries and timeout per request instead of a hardcoded constant', function (): void {
     Bus::fake();
 
