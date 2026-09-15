@@ -55,22 +55,32 @@ it('accepts a valid request, queues the job, and responds 202 with the hub job i
 it('dispatches onto the queue posted by the environment when no override is configured', function (): void {
     Bus::fake();
 
-    $this->postJson('/api/jobs', validJobRequest(['queue' => 'emails']), [
+    $payload = PayloadFactory::make();
+
+    $this->postJson('/api/jobs', validJobRequest(['queue' => 'emails', 'payload' => $payload]), [
         'X-Laravel-Queue-Token' => 'test-token',
     ])->assertStatus(202);
 
-    Bus::assertDispatched(RunEnvironmentJob::class, fn (RunEnvironmentJob $job): bool => $job->queue === 'emails');
+    Bus::assertDispatched(
+        RunEnvironmentJob::class,
+        fn (RunEnvironmentJob $job): bool => $job->queue === 'emails' && $job->payload === $payload,
+    );
 });
 
 it('forces every job onto the configured queue, ignoring the posted queue name', function (): void {
     Bus::fake();
     config(['queue-worker.queue' => 'environments']);
 
-    $this->postJson('/api/jobs', validJobRequest(['queue' => 'emails']), [
+    $payload = PayloadFactory::make();
+
+    $this->postJson('/api/jobs', validJobRequest(['queue' => 'emails', 'payload' => $payload]), [
         'X-Laravel-Queue-Token' => 'test-token',
     ])->assertStatus(202);
 
-    Bus::assertDispatched(RunEnvironmentJob::class, fn (RunEnvironmentJob $job): bool => $job->queue === 'environments');
+    Bus::assertDispatched(
+        RunEnvironmentJob::class,
+        fn (RunEnvironmentJob $job): bool => $job->queue === 'environments' && $job->payload === $payload,
+    );
 });
 
 it('derives tries and timeout per request instead of a hardcoded constant', function (): void {
