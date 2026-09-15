@@ -52,6 +52,8 @@ return [
 
     'allowed_root' => env('QUEUE_WORKER_ALLOWED_ROOT'),
 
+    'queue' => env('QUEUE_WORKER_QUEUE'),
+
     'route_prefix' => env('QUEUE_WORKER_ROUTE_PREFIX', 'api'),
 
     'route_middleware' => ['api'],
@@ -79,6 +81,12 @@ QUEUE_WORKER_DEDUP_WINDOW_HOURS=24
 **`QUEUE_WORKER_ALLOWED_ROOT` has NO default value on purpose, and this is a loud warning: you must set it.** Every incoming `path` is resolved with `realpath()` and must live inside this directory, must contain an `artisan` file directly inside it, and its basename must match the request's `slug` field (i.e. an environment at `/srv/environments/app-feature-1234` must be posted with `"slug": "app-feature-1234"`). If `allowed_root` is not configured, every single request is rejected with `422` — the package never falls back to "allow everything" or "allow the current working directory".
 
 The hub itself should live **outside** `allowed_root`. If it doesn't (hub at `/srv/environments/hub`, environments at `/srv/environments/<slug>`), a request pointing at the hub's own directory passes every other check; the package rejects it explicitly with `422` rather than queueing a job that runs `queue-consumer:run` inside the hub and fails later.
+
+**`QUEUE_WORKER_QUEUE` decides which hub-side queue every job lands on.** Left unset, the hub reuses the queue name posted by the environment — and since that name comes from applications the hub operator does not control, a job posted to a queue no Horizon supervisor watches is stored and never consumed: `202` to the consumer, no failed job, nothing on the dashboard. Set it to a queue your supervisor actually watches and every incoming job is forced onto it. This is safe: the hub-side queue only decides which hub worker picks up `RunEnvironmentJob`; the payload is forwarded untouched and carries the job's own queue name for the environment side.
+
+```env
+QUEUE_WORKER_QUEUE=environments
+```
 
 `php_binary_map` maps an environment's own `composer.json` `require.php` constraint (major.minor, e.g. `8.2` from `^8.2`) to a concrete PHP binary on the host running this package. There is no fallback to this hub's own `php` binary: an environment whose PHP version isn't mapped causes the job to throw loudly, rather than silently running someone else's job under the wrong PHP version.
 
