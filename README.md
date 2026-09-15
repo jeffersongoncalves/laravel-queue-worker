@@ -73,6 +73,7 @@ return [
 ```env
 QUEUE_WORKER_TOKEN=some-shared-secret-token
 QUEUE_WORKER_ALLOWED_ROOT=/srv/environments
+QUEUE_WORKER_QUEUE=environments
 QUEUE_WORKER_DEDUP_WINDOW_HOURS=24
 ```
 
@@ -83,10 +84,6 @@ QUEUE_WORKER_DEDUP_WINDOW_HOURS=24
 The hub itself should live **outside** `allowed_root`. If it doesn't (hub at `/srv/environments/hub`, environments at `/srv/environments/<slug>`), a request pointing at the hub's own directory passes every other check; the package rejects it explicitly with `422` rather than queueing a job that runs `queue-consumer:run` inside the hub and fails later.
 
 **`QUEUE_WORKER_QUEUE` decides which hub-side queue every job lands on.** Left unset, the hub reuses the queue name posted by the environment — and since that name comes from applications the hub operator does not control, a job posted to a queue no Horizon supervisor watches is stored and never consumed: `202` to the consumer, no failed job, nothing on the dashboard. Set it to a queue your supervisor actually watches and every incoming job is forced onto it. This is safe: the hub-side queue only decides which hub worker picks up `RunEnvironmentJob`; the payload is forwarded untouched and carries the job's own queue name for the environment side.
-
-```env
-QUEUE_WORKER_QUEUE=environments
-```
 
 `php_binary_map` maps an environment's own `composer.json` `require.php` constraint (major.minor, e.g. `8.2` from `^8.2`) to a concrete PHP binary on the host running this package. There is no fallback to this hub's own `php` binary: an environment whose PHP version isn't mapped causes the job to throw loudly, rather than silently running someone else's job under the wrong PHP version.
 
@@ -101,6 +98,12 @@ php artisan migrate
 
 The migration is written defensively: it checks whether `failed_jobs` exists and whether each column already exists before adding it.
 
+### Reading a failed job
+
+When the child process exits non-zero, the hub throws `EnvironmentProcessFailedException` and Laravel stores its message on the `failed_jobs` row. The message carries the exit code plus **both** the child's stderr and stdout — `queue-consumer:run` rethrows the job's own exception and Laravel renders it through the console handler, which writes to stdout, so stderr alone is usually empty.
+
+The combined output is truncated to 4000 characters, keeping the head (the rendered exception: class, message, file and line) and the tail, with a `[... truncated ...]` marker between them, so a long stack trace never fills the row.
+
 ## Protocol
 
 `POST {route_prefix}/jobs` (default `/api/jobs`), with header `X-Laravel-Queue-Token`:
@@ -114,6 +117,8 @@ The migration is written defensively: it checks whether `failed_jobs` exists and
     "payload": "<opaque string, exactly what Laravel's own createPayload() produced in the originating environment>"
 }
 ```
+
+`queue` is the hub-side queue the job is placed on, unless `QUEUE_WORKER_QUEUE` is configured, which overrides it. `delay` is honored as posted. Both are hub-side scheduling only — the job's own queue name lives inside `payload` and is what the environment sees when it runs.
 
 A successful response is `202` with `{"id": "<hub job id>"}` (the `uuid` read off the payload). Delivery is at-least-once: the consumer package may resend an identical request if it loses the response, so this package deduplicates by the payload's `uuid` for `dedup_window_hours` (default 24h).
 
