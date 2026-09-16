@@ -28,6 +28,8 @@ This package:
 2. Queues a `RunEnvironmentJob` onto Horizon/Redis — nothing runs synchronously inside the HTTP request.
 3. When that job runs, it spawns a child PHP process **inside the originating environment's own directory**, running `artisan queue-consumer:run` there, so the job executes with that environment's own autoloader, code, and database connection — never inside this hub application's own process.
 
+Every key defined in this hub's `.env` and in the environment's `.env` is removed from the child process environment before it starts. A child inherits the parent environment, and Laravel publishes the hub's own `.env` values into it, while the child's `Dotenv::createImmutable` never overwrites what is already set — so without the scrub the hub's `DB_*`, `REDIS_*`, `QUEUE_CONNECTION` and `APP_KEY` would silently beat the environment's own. `PATH` and the rest of the shell environment are left alone.
+
 ## Installation
 
 You can install the package via composer:
