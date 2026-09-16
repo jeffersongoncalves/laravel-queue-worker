@@ -2,6 +2,18 @@
 
 All notable changes to `laravel-queue-worker` will be documented in this file.
 
+## 1.1.1 - 2026-09-16
+
+### What's Changed
+
+#### Fixed
+
+- **The child process no longer inherits the hub's environment variables.** Symfony inherits the parent environment and Laravel publishes the hub's own `.env` into it, while the child bootstraps with `Dotenv::createImmutable`, which never overwrites what is already set — so every key the hub defined silently beat the environment's own `.env` inside the job: wrong database host, nested dispatches pushed into the hub's Redis under the hub's prefix, the hub's `APP_KEY`. Keys from both `.env` files are now passed to `Process::env()` as `false`, removing them from the child so its own Dotenv wins. `PATH` is preserved, case-insensitively (#13, #14).
+
+No configuration change is required, and no `Env::disablePutenv()` on the hub side.
+
+**Full Changelog**: https://github.com/jeffersongoncalves/laravel-queue-worker/compare/1.1.0...1.1.1
+
 ## 1.1.0 - 2026-09-15
 
 ### What's Changed
