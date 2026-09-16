@@ -167,6 +167,55 @@ it('still accepts a payload that omits the timeout, falling back to the default'
     Bus::assertDispatched(fn (RunEnvironmentJob $job): bool => $job->childTimeout === 60);
 });
 
+it('rejects a payload whose hub job would outlive retry_after and be run twice', function (): void {
+    Bus::fake();
+    config(['queue.default' => 'redis', 'queue.connections.redis.retry_after' => 90]);
+
+    $response = $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 300]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token']);
+
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors('payload');
+
+    Bus::assertNothingDispatched();
+});
+
+it('accepts the same payload once retry_after leaves room for the margin', function (): void {
+    Bus::fake();
+    config(['queue.default' => 'redis', 'queue.connections.redis.retry_after' => 3600]);
+
+    $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 300]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token'])->assertStatus(202);
+
+    Bus::assertDispatched(fn (RunEnvironmentJob $job): bool => $job->childTimeout === 300);
+});
+
+it('rejects a hub job that would expire on the very second retry_after does', function (): void {
+    Bus::fake();
+    config(['queue.default' => 'redis', 'queue.connections.redis.retry_after' => 360]);
+
+    // 300 + the 60 second margin lands exactly on retry_after, which is already
+    // a race rather than a bound.
+    $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 300]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token'])->assertStatus(422);
+
+    Bus::assertNothingDispatched();
+});
+
+it('leaves a connection without retry_after alone, having nothing to compare against', function (): void {
+    Bus::fake();
+    config(['queue.default' => 'sync']);
+
+    $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 86400]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token'])->assertStatus(202);
+
+    Bus::assertDispatched(RunEnvironmentJob::class);
+});
+
 it('derives tries and timeout per request instead of a hardcoded constant', function (): void {
     Bus::fake();
 

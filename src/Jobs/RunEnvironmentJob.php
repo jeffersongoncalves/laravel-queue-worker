@@ -28,8 +28,12 @@ class RunEnvironmentJob implements ShouldQueue
      * timing out first is the path worth having: Symfony kills it and the
      * failed_jobs row names the environment. The other way round, the
      * worker's pcntl_alarm kills this job mid-run, leaving an orphan child.
+     *
+     * Public because the controller has to know what a posted timeout grows
+     * into before it dispatches anything: that total, not the posted value,
+     * is what has to stay under the connection's retry_after.
      */
-    private const TIMEOUT_MARGIN = 60;
+    public const TIMEOUT_MARGIN = 60;
 
     public int $tries;
 

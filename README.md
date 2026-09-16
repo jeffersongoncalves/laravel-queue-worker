@@ -116,7 +116,7 @@ A job that was already queued before this version takes the margin out of the ch
 Two hub-side knobs still cap the chain and cannot be derived per job, so set them above the longest timeout any environment declares:
 
 - the Horizon supervisor's `timeout` in `config/horizon.php` — only a fallback, since `Worker::timeoutForJob()` prefers the job's own `$timeout`;
-- `retry_after` on the Redis connection in `config/queue.php`, which **must** exceed the longest job timeout, or the job is reclaimed and duplicated while still running.
+- `retry_after` on the Redis connection in `config/queue.php`, which **must** exceed the longest job timeout, or the job is reclaimed and duplicated while still running. This one is enforced rather than merely documented: a payload whose timeout plus the margin reaches `retry_after` on the default queue connection is rejected with `422` naming both numbers, since accepting it would run the environment's job twice with nothing in `failed_jobs` to show for it. A connection that has no `retry_after` (`sync`, or `sqs` with its own visibility timeout) is left alone.
 
 The required order:
 
