@@ -127,6 +127,46 @@ it('rejects a request pointing at the hub own directory and never dispatches a j
     Bus::assertNothingDispatched();
 });
 
+it('rejects a payload declaring no timeout instead of running it for one second', function (): void {
+    Bus::fake();
+
+    $response = $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 0]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token']);
+
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors('payload');
+
+    Bus::assertNothingDispatched();
+});
+
+it('rejects a negative payload timeout, which Symfony Process refuses outright', function (): void {
+    Bus::fake();
+
+    $response = $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => -30]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token']);
+
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors('payload');
+
+    Bus::assertNothingDispatched();
+});
+
+it('still accepts a payload that omits the timeout, falling back to the default', function (): void {
+    Bus::fake();
+
+    $payload = PayloadFactory::make();
+    $decoded = json_decode($payload, true, flags: JSON_THROW_ON_ERROR);
+    unset($decoded['timeout']);
+
+    $this->postJson('/api/jobs', validJobRequest([
+        'payload' => json_encode($decoded, JSON_THROW_ON_ERROR),
+    ]), ['X-Laravel-Queue-Token' => 'test-token'])->assertStatus(202);
+
+    Bus::assertDispatched(fn (RunEnvironmentJob $job): bool => $job->childTimeout === 60);
+});
+
 it('derives tries and timeout per request instead of a hardcoded constant', function (): void {
     Bus::fake();
 

@@ -41,6 +41,19 @@ class JobController
             throw ValidationException::withMessages(['payload' => ['The payload is not valid JSON.']]);
         }
 
+        // Laravel reads a zero timeout as "no timeout" (pcntl_alarm(0) cancels
+        // the alarm), which the hub cannot honor: the child would hold a worker
+        // indefinitely and retry_after would reclaim and duplicate the job while
+        // it still runs. A negative one is invalid to Symfony Process outright.
+        // Neither can be quietly clamped, since max(1, $timeout) would run a job
+        // that declared no limit for one second, so both are rejected here.
+        if ($metadata->timeout < 1) {
+            throw ValidationException::withMessages(['payload' => [
+                'The payload timeout must be at least 1 second. The hub supervises every job with a '
+                .'process timeout, so it cannot run a job that declares no limit.',
+            ]]);
+        }
+
         $override = config('queue-worker.queue');
 
         // The posted name belongs to the originating application and travels
