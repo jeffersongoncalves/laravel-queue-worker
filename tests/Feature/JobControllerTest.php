@@ -83,6 +83,34 @@ it('forces every job onto the configured queue, ignoring the posted queue name',
     );
 });
 
+it('carries the posted queue name on the job even when the hub-side queue is overridden', function (): void {
+    Bus::fake();
+    config(['queue-worker.queue' => 'environments']);
+
+    $this->postJson('/api/jobs', validJobRequest(['queue' => 'emails']), [
+        'X-Laravel-Queue-Token' => 'test-token',
+    ])->assertStatus(202);
+
+    Bus::assertDispatched(
+        RunEnvironmentJob::class,
+        fn (RunEnvironmentJob $job): bool => $job->queue === 'environments' && $job->originalQueue === 'emails',
+    );
+});
+
+it('falls back to the default queue name when the request omits it', function (): void {
+    Bus::fake();
+
+    $request = validJobRequest();
+    unset($request['queue']);
+
+    $this->postJson('/api/jobs', $request, ['X-Laravel-Queue-Token' => 'test-token'])->assertStatus(202);
+
+    Bus::assertDispatched(
+        RunEnvironmentJob::class,
+        fn (RunEnvironmentJob $job): bool => $job->originalQueue === 'default',
+    );
+});
+
 it('rejects a request pointing at the hub own directory and never dispatches a job', function (): void {
     Bus::fake();
     // Hub deployed inside allowed_root: the container binding is what feeds
@@ -118,6 +146,31 @@ it('derives tries and timeout per request instead of a hardcoded constant', func
         RunEnvironmentJob::class,
         fn (RunEnvironmentJob $job): bool => $job->uuid === 'job-b' && $job->tries === 7 && $job->timeout === 3600,
     );
+});
+
+it('rejects a plain HTTP request with 426 before looking at the token', function (): void {
+    config(['queue-worker.require_https' => true]);
+
+    Bus::fake();
+
+    $response = $this->postJson('http://localhost/api/jobs', validJobRequest(), [
+        'X-Laravel-Queue-Token' => 'test-token',
+    ]);
+
+    $response->assertStatus(426);
+    Bus::assertNothingDispatched();
+});
+
+it('accepts an HTTPS request while require_https is on', function (): void {
+    config(['queue-worker.require_https' => true]);
+
+    Bus::fake();
+
+    $this->postJson('https://localhost/api/jobs', validJobRequest(), [
+        'X-Laravel-Queue-Token' => 'test-token',
+    ])->assertStatus(202);
+
+    Bus::assertDispatched(RunEnvironmentJob::class);
 });
 
 it('rejects a request without the token header and processes nothing', function (): void {

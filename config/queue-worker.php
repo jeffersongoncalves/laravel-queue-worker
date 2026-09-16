@@ -23,6 +23,14 @@ return [
      */
     'queue' => env('QUEUE_WORKER_QUEUE'),
 
+    /*
+     * Rejects any request that did not arrive over HTTPS with a 426. Turn it
+     * off only when the transport is already private — loopback, or an
+     * encrypted network such as WireGuard. Behind a TLS-terminating proxy,
+     * TrustProxies must be configured or every request looks insecure.
+     */
+    'require_https' => env('QUEUE_WORKER_REQUIRE_HTTPS', true),
+
     'route_prefix' => env('QUEUE_WORKER_ROUTE_PREFIX', 'api'),
 
     'route_middleware' => ['api'],

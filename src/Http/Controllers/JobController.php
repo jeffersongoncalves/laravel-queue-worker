@@ -43,9 +43,14 @@ class JobController
 
         $override = config('queue-worker.queue');
 
+        // The posted name belongs to the originating application and travels
+        // with the job so a release returns to it; the hub-side queue is the
+        // operator's routing decision and may differ.
+        $originalQueue = $data['queue'] ?? 'default';
+
         $queue = is_string($override) && $override !== ''
             ? $override
-            : ($data['queue'] ?? 'default');
+            : $originalQueue;
 
         RunEnvironmentJob::dispatch(
             slug: $data['slug'],
@@ -55,6 +60,7 @@ class JobController
             displayName: $metadata->displayName,
             maxTries: $metadata->maxTries,
             timeout: $metadata->timeout,
+            originalQueue: $originalQueue,
         )->onQueue($queue)->delay((int) ($data['delay'] ?? 0));
 
         return response()->json(['id' => $metadata->uuid], 202);
