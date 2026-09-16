@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Str;
 use JeffersonGoncalves\QueueWorker\Exceptions\EnvironmentProcessFailedException;
+use JeffersonGoncalves\QueueWorker\Exceptions\OutdatedEnvironmentConsumerException;
 use JeffersonGoncalves\QueueWorker\Jobs\RunEnvironmentJob;
 use JeffersonGoncalves\QueueWorker\PhpBinaryResolver;
 use JeffersonGoncalves\QueueWorker\Tests\Fixtures\PayloadFactory;
@@ -93,6 +94,53 @@ it('includes the child stdout in the failure message, where Laravel renders the 
 
     expect(fn () => $job->handle(app(PhpBinaryResolver::class)))
         ->toThrow(EnvironmentProcessFailedException::class, 'RuntimeException: the real failure');
+});
+
+it('names the outdated consumer when the child rejects --queue, instead of a bare Symfony message', function (): void {
+    Process::fake(['*' => Process::result(
+        output: '',
+        errorOutput: 'The "--queue" option does not exist.',
+        exitCode: 1,
+    )]);
+
+    $job = makeEnvironmentJob(['slug' => 'app-feature-1234']);
+
+    expect(fn () => $job->handle(app(PhpBinaryResolver::class)))
+        ->toThrow(function (OutdatedEnvironmentConsumerException $exception) use ($job): void {
+            expect($exception->getMessage())
+                ->toContain('app-feature-1234')
+                ->toContain($job->path)
+                ->toContain('1.2.0')
+                ->toContain('composer require jeffersongoncalves/laravel-queue-consumer:^1.2');
+        });
+});
+
+it('still raises the generic failure for a child that died for any other reason', function (): void {
+    Process::fake(['*' => Process::result(
+        output: 'The "--nonsense" option does not exist.',
+        errorOutput: '',
+        exitCode: 1,
+    )]);
+
+    $job = makeEnvironmentJob();
+
+    expect(fn () => $job->handle(app(PhpBinaryResolver::class)))
+        ->toThrow(EnvironmentProcessFailedException::class, 'The "--nonsense" option does not exist.');
+});
+
+it('does not blame the consumer for a job that merely quotes the parser message on stdout', function (): void {
+    // The argument parser fails on stderr before the command runs, so the same
+    // text on stdout is the job's own rendered exception, not an old consumer.
+    Process::fake(['*' => Process::result(
+        output: 'RuntimeException: The "--queue" option does not exist. at /srv/app/Jobs/Foo.php:42',
+        errorOutput: '',
+        exitCode: 1,
+    )]);
+
+    $job = makeEnvironmentJob();
+
+    expect(fn () => $job->handle(app(PhpBinaryResolver::class)))
+        ->toThrow(EnvironmentProcessFailedException::class, 'RuntimeException');
 });
 
 it('truncates a huge child output instead of storing a whole stack trace', function (): void {

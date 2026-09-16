@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use JeffersonGoncalves\QueueWorker\Exceptions\EnvironmentProcessFailedException;
+use JeffersonGoncalves\QueueWorker\Exceptions\OutdatedEnvironmentConsumerException;
 use JeffersonGoncalves\QueueWorker\PhpBinaryResolver;
 
 class RunEnvironmentJob implements ShouldQueue
@@ -108,6 +109,23 @@ class RunEnvironmentJob implements ShouldQueue
             // Laravel renders the child's exception through its console handler,
             // which writes to stdout, so errorOutput() alone is often empty.
             $details = $this->truncate(trim($result->errorOutput()."\n".$result->output()));
+
+            // ponytail: matching on Symfony's message is a string match, but the
+            // trigger is unambiguous — this package is the only thing that passed
+            // --queue, and consumers before 1.2.0 are the only ones that reject it.
+            // Only stderr is searched: the argument parser fails there before the
+            // command runs, while a job's own exception is rendered to stdout, so
+            // a job whose output happens to quote this message is not mistaken
+            // for an outdated consumer. Upgrade path if it ever gets brittle:
+            // have the consumer expose its version and check it before running.
+            if (str_contains($result->errorOutput(), 'The "--queue" option does not exist')) {
+                throw new OutdatedEnvironmentConsumerException(
+                    "Environment [{$this->slug}] at [{$this->path}] runs laravel-queue-consumer older than "
+                    .'1.2.0, which does not accept --queue. Run `composer require '
+                    .'jeffersongoncalves/laravel-queue-consumer:^1.2` in that directory — plain '
+                    .'`composer update` cannot cross a constraint pinned to 1.1.'
+                );
+            }
 
             throw new EnvironmentProcessFailedException(
                 "Child process for environment [{$this->slug}] exited with code [{$result->exitCode()}]: {$details}"
