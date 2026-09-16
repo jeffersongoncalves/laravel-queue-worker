@@ -111,7 +111,7 @@ The child process runs with the timeout the originating job declared (`timeout` 
 
 A payload declaring `timeout: 0` is rejected with `422`. Laravel reads zero as "no timeout", and the hub cannot honor that: the child would hold a worker indefinitely and `retry_after` would reclaim and duplicate the job while it still runs. A negative timeout is rejected for the same reason Symfony Process refuses it. A payload that omits `timeout` entirely still falls back to 60 seconds.
 
-A job that was already queued before this version takes the margin out of the child's share instead, since the worker's alarm reads the timeout off the outer queue payload, written at dispatch and no longer rewritable. Below 60 seconds there is no room to take and the two expire together, exactly as they did before the upgrade.
+A job that was already queued before this version takes the margin out of the child's share instead, since the worker's alarm reads the timeout off the outer queue payload, written at dispatch and no longer rewritable. At 60 seconds or less there is not a whole margin to take, so one second is reserved instead — enough to order the two deadlines, which is all the margin is for. Only a one-second job has nothing left to reserve, and there the two expire together as they did before the upgrade.
 
 Two hub-side knobs still cap the chain and cannot be derived per job, so set them above the longest timeout any environment declares:
 

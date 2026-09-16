@@ -220,7 +220,7 @@ it('takes the margin out of the child share for a job queued before childTimeout
     Process::assertRan(fn ($process): bool => $process->timeout === 240);
 });
 
-it('leaves a legacy timeout with no room to spare alone rather than strangling the child', function (): void {
+it('reserves a single second for a legacy timeout too small to give up the whole margin', function (): void {
     Process::fake();
 
     $job = makeEnvironmentJob();
@@ -229,7 +229,21 @@ it('leaves a legacy timeout with no room to spare alone rather than strangling t
 
     $job->handle(app(PhpBinaryResolver::class));
 
-    Process::assertRan(fn ($process): bool => $process->timeout === 60);
+    // A whole margin would leave nothing to run in; one second off still
+    // orders the two deadlines, which is all the margin is there for.
+    Process::assertRan(fn ($process): bool => $process->timeout === 59);
+});
+
+it('keeps a one-second legacy timeout runnable, having nothing left to reserve', function (): void {
+    Process::fake();
+
+    $job = makeEnvironmentJob();
+    $job->childTimeout = 0;
+    $job->timeout = 1;
+
+    $job->handle(app(PhpBinaryResolver::class));
+
+    Process::assertRan(fn ($process): bool => $process->timeout === 1);
 });
 
 it('outlives the child it supervises, so the child is the one that times out first', function (): void {

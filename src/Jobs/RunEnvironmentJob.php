@@ -121,8 +121,10 @@ class RunEnvironmentJob implements ShouldQueue
      * written at dispatch — which nothing here can rewrite, since that payload
      * is already in Redis. What it can do is take the margin out of the child's
      * share instead, so the child still dies first. Below the margin there is
-     * no room to take, and the two expire together exactly as they did before
-     * the upgrade.
+     * not a whole margin to take, and one second is reserved instead — a
+     * second off the child's budget buys the same ordering. At a one-second
+     * timeout even that is gone, since no smaller positive value exists, and
+     * the two expire together exactly as they did before the upgrade.
      */
     private function childProcessTimeout(): int
     {
@@ -130,9 +132,9 @@ class RunEnvironmentJob implements ShouldQueue
             return $this->childTimeout;
         }
 
-        return $this->timeout > self::TIMEOUT_MARGIN
-            ? $this->timeout - self::TIMEOUT_MARGIN
-            : $this->timeout;
+        $reserved = $this->timeout > self::TIMEOUT_MARGIN ? self::TIMEOUT_MARGIN : 1;
+
+        return max(1, $this->timeout - $reserved);
     }
 
     /**
