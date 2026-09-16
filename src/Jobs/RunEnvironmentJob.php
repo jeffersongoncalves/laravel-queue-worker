@@ -21,9 +21,26 @@ class RunEnvironmentJob implements ShouldQueue
     use InteractsWithQueue;
     use Queueable;
 
+    /**
+     * How much longer this job may live than the child it supervises. Both
+     * numbers come from the same payload field, so without a margin they
+     * expire together and it is a coin toss which fires first. The child
+     * timing out first is the path worth having: Symfony kills it and the
+     * failed_jobs row names the environment. The other way round, the
+     * worker's pcntl_alarm kills this job mid-run, leaving an orphan child.
+     */
+    private const TIMEOUT_MARGIN = 60;
+
     public int $tries;
 
     public int $timeout;
+
+    /**
+     * The timeout the environment declared on its own job, applied to the
+     * child process. Carries a default for the same reason $originalQueue
+     * does: a job serialized by an older version must still unserialize.
+     */
+    public int $childTimeout = 60;
 
     /**
      * The queue the environment posted, which is what a released job must
@@ -46,7 +63,8 @@ class RunEnvironmentJob implements ShouldQueue
         string $originalQueue = 'default',
     ) {
         $this->tries = max(1, $maxTries);
-        $this->timeout = max(1, $timeout);
+        $this->childTimeout = max(1, $timeout);
+        $this->timeout = $this->childTimeout + self::TIMEOUT_MARGIN;
         $this->originalQueue = $originalQueue;
     }
 
@@ -68,14 +86,17 @@ class RunEnvironmentJob implements ShouldQueue
 
         $phpBinary = $phpBinaryResolver->resolve($this->path);
 
-        $result = Process::path($this->path)->env($this->scrubbedEnvironment())->run([
-            $phpBinary,
-            'artisan',
-            'queue-consumer:run',
-            '--payload='.base64_encode($this->payload),
-            '--queue='.$this->originalQueue,
-            ...($this->attempts() >= $this->tries ? ['--last-attempt'] : []),
-        ]);
+        $result = Process::path($this->path)
+            ->timeout($this->childTimeout)
+            ->env($this->scrubbedEnvironment())
+            ->run([
+                $phpBinary,
+                'artisan',
+                'queue-consumer:run',
+                '--payload='.base64_encode($this->payload),
+                '--queue='.$this->originalQueue,
+                ...($this->attempts() >= $this->tries ? ['--last-attempt'] : []),
+            ]);
 
         if ($result->failed()) {
             // Laravel renders the child's exception through its console handler,

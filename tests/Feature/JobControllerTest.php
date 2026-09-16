@@ -46,7 +46,7 @@ it('accepts a valid request, queues the job, and responds 202 with the hub job i
         expect($job->uuid)->toBe($decoded['uuid']);
         expect($job->displayName)->toBe($decoded['displayName']);
         expect($job->tries)->toBe(5);
-        expect($job->timeout)->toBe(900);
+        expect($job->childTimeout)->toBe(900);
 
         return true;
     });
@@ -140,11 +140,11 @@ it('derives tries and timeout per request instead of a hardcoded constant', func
 
     Bus::assertDispatched(
         RunEnvironmentJob::class,
-        fn (RunEnvironmentJob $job): bool => $job->uuid === 'job-a' && $job->tries === 2 && $job->timeout === 300,
+        fn (RunEnvironmentJob $job): bool => $job->uuid === 'job-a' && $job->tries === 2 && $job->childTimeout === 300,
     );
     Bus::assertDispatched(
         RunEnvironmentJob::class,
-        fn (RunEnvironmentJob $job): bool => $job->uuid === 'job-b' && $job->tries === 7 && $job->timeout === 3600,
+        fn (RunEnvironmentJob $job): bool => $job->uuid === 'job-b' && $job->tries === 7 && $job->childTimeout === 3600,
     );
 });
 

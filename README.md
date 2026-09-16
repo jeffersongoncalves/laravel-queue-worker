@@ -105,6 +105,21 @@ Otherwise terminate TLS in front of the hub (an internal CA is enough; mTLS if y
 
 `php_binary_map` maps an environment's own `composer.json` `require.php` constraint (major.minor, e.g. `8.2` from `^8.2`) to a concrete PHP binary on the host running this package. There is no fallback to this hub's own `php` binary: an environment whose PHP version isn't mapped causes the job to throw loudly, rather than silently running someone else's job under the wrong PHP version.
 
+### Timeouts
+
+The child process runs with the timeout the originating job declared (`timeout` on the payload, default `60`), and the hub-side `RunEnvironmentJob` gets that value plus a 60-second margin. The margin matters: both numbers come from the same payload field, so without it they expire together and it is a coin toss which fires first. The child timing out first is the path worth having — Symfony kills it, the job fails with a `ProcessTimedOutException`, and the `failed_jobs` row names the environment. The other way round, the worker's `pcntl_alarm` kills the hub job mid-run, leaving an orphan child process and `has been attempted too many times or run too long` as the only clue.
+
+Two hub-side knobs still cap the chain and cannot be derived per job, so set them above the longest timeout any environment declares:
+
+- the Horizon supervisor's `timeout` in `config/horizon.php` — only a fallback, since `Worker::timeoutForJob()` prefers the job's own `$timeout`;
+- `retry_after` on the Redis connection in `config/queue.php`, which **must** exceed the longest job timeout, or the job is reclaimed and duplicated while still running.
+
+The required order:
+
+```
+child timeout (payload)  <  job timeout (payload + 60s)  <  supervisor timeout  <  retry_after
+```
+
 ### Optional: distinguishing failed jobs by environment
 
 This package can optionally add nullable `slug` and `display_name` columns to your `failed_jobs` table, so failed jobs from many environments are distinguishable in a listing without cross-referencing `path`. This migration is **not run automatically** — publish and run it yourself if you want it:
