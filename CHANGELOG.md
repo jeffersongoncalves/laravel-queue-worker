@@ -2,6 +2,30 @@
 
 All notable changes to `laravel-queue-worker` will be documented in this file.
 
+## 1.3.0 - 2026-09-16
+
+### Timeouts now reach the child process (#17)
+
+`RunEnvironmentJob` never passed a timeout to `Process`, so every job was capped at Laravel's `PendingProcess` default of 60 seconds no matter what the originating job declared. Anything slower than a minute was unrunnable through the hub, and the failure read as a bug in the environment.
+
+- the payload timeout is applied to the child process, and the hub job keeps it plus a 60-second margin, so the child is the one that times out first — Symfony kills the process and the `failed_jobs` row names the environment, instead of `pcntl_alarm` killing the worker and orphaning the child;
+- a job queued before this version takes that margin out of the child's share instead, since the worker's alarm reads the timeout off the outer queue payload, which is already in Redis and cannot be rewritten;
+- a payload declaring `timeout: 0` (Laravel's "no timeout") or a negative one is now rejected with `422` instead of silently running for one second;
+- a payload whose timeout plus the margin reaches `retry_after` on the default queue connection is rejected with `422` naming both numbers, rather than being accepted and run twice concurrently.
+
+### An outdated consumer now says so (#19)
+
+An environment still on `laravel-queue-consumer` 1.1.0 rejects the `--queue` option the hub has passed since 1.2.0, and every job from it failed with `The "--queue" option does not exist.` — a Symfony message naming neither package nor version, for a fix that lives in a different directory.
+
+- new `OutdatedEnvironmentConsumerException`, raised when the child's **stderr** carries that message, with the environment slug, its path and the `composer require jeffersongoncalves/laravel-queue-consumer:^1.2` to run there;
+- only stderr is matched, where the argument parser fails before the command runs, so a job whose own output quotes that text is not mistaken for an outdated consumer.
+
+### Upgrading
+
+Environments must require `"jeffersongoncalves/laravel-queue-consumer": "^1.2"`. `^1.1` allows 1.2.0 but does not require it — an existing `composer.lock` keeps whatever 1.1.x it already resolved.
+
+Check `retry_after` on the hub's queue connection before upgrading: it must exceed the longest timeout any environment declares plus 60 seconds, or those jobs are refused at `POST /api/jobs`. The README documents the full ordering.
+
 ## 1.2.0 - 2026-09-16
 
 ### What's Changed
