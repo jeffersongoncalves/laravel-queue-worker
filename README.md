@@ -18,7 +18,7 @@ Receive Laravel queue job payloads over HTTP from many ephemeral review environm
 
 This is the **hub-side** counterpart to [`jeffersongoncalves/laravel-queue-consumer`](https://github.com/jeffersongoncalves/laravel-queue-consumer). At least one environment running that package is required to send this package any jobs — installing this package alone receives nothing on its own.
 
-> **Requires `laravel-queue-consumer` 1.2.0 or newer on the environment side.** From 1.2.0 this package passes `--queue=` to `queue-consumer:run`, an option older consumers do not accept. There is no Composer edge between the hub and the environments, so nothing enforces this for you: pin `"jeffersongoncalves/laravel-queue-consumer": "^1.2"` in every environment, since `^1.1` still resolves to 1.1.0 on a fresh `composer install`. An environment on an older consumer fails every job with `OutdatedEnvironmentConsumerException`, naming the directory and the `composer update` to run there.
+> **Requires `laravel-queue-consumer` 1.2.0 or newer on the environment side.** From 1.2.0 this package passes `--queue=` to `queue-consumer:run`, an option older consumers do not accept. There is no Composer edge between the hub and the environments, so nothing enforces this for you: require `"jeffersongoncalves/laravel-queue-consumer": "^1.2"` in every environment. `^1.1` allows 1.2.0 but does not require it — an existing `composer.lock` keeps whatever 1.1.x it already resolved, and nothing about that install looks out of date. An environment on an older consumer fails every job with `OutdatedEnvironmentConsumerException`, naming the directory and the command to run there.
 
 ## How it works
 
@@ -122,7 +122,7 @@ When the child process exits non-zero, the hub throws `EnvironmentProcessFailedE
 
 The combined output is truncated to 4000 characters, keeping the head (the rendered exception: class, message, file and line) and the tail, with a `[... truncated ...]` marker between them, so a long stack trace never fills the row.
 
-One failure is translated rather than forwarded: a child dying on `The "--queue" option does not exist.` raises `OutdatedEnvironmentConsumerException` instead, since that Symfony message names neither package nor version and the fix is a `composer update` in a different directory. The exception message carries the environment slug, its path, and the command to run there.
+One failure is translated rather than forwarded: a child whose **stderr** carries `The "--queue" option does not exist.` raises `OutdatedEnvironmentConsumerException` instead, since that Symfony message names neither package nor version and the fix is a Composer command in a different directory. Only stderr is searched, where the argument parser fails before the command runs, so a job whose own output quotes that text is not mistaken for an outdated consumer. The exception message carries the environment slug, its path, and the `composer require ...:^1.2` to run there — plain `composer update` cannot cross a constraint pinned to 1.1.
 
 ## Protocol
 

@@ -111,7 +111,7 @@ it('names the outdated consumer when the child rejects --queue, instead of a bar
                 ->toContain('app-feature-1234')
                 ->toContain($job->path)
                 ->toContain('1.2.0')
-                ->toContain('composer update jeffersongoncalves/laravel-queue-consumer');
+                ->toContain('composer require jeffersongoncalves/laravel-queue-consumer:^1.2');
         });
 });
 
@@ -126,6 +126,21 @@ it('still raises the generic failure for a child that died for any other reason'
 
     expect(fn () => $job->handle(app(PhpBinaryResolver::class)))
         ->toThrow(EnvironmentProcessFailedException::class, 'The "--nonsense" option does not exist.');
+});
+
+it('does not blame the consumer for a job that merely quotes the parser message on stdout', function (): void {
+    // The argument parser fails on stderr before the command runs, so the same
+    // text on stdout is the job's own rendered exception, not an old consumer.
+    Process::fake(['*' => Process::result(
+        output: 'RuntimeException: The "--queue" option does not exist. at /srv/app/Jobs/Foo.php:42',
+        errorOutput: '',
+        exitCode: 1,
+    )]);
+
+    $job = makeEnvironmentJob();
+
+    expect(fn () => $job->handle(app(PhpBinaryResolver::class)))
+        ->toThrow(EnvironmentProcessFailedException::class, 'RuntimeException');
 });
 
 it('truncates a huge child output instead of storing a whole stack trace', function (): void {
