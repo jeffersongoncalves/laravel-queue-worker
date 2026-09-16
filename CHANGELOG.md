@@ -2,6 +2,22 @@
 
 All notable changes to `laravel-queue-worker` will be documented in this file.
 
+## 1.2.0 - 2026-09-16
+
+### What's Changed
+
+> **Upgrade note:** this release requires `laravel-queue-consumer` **1.2.0 or newer** on the environment side — older consumers reject the new `--queue` option. It also rejects plain HTTP by default; see below.
+
+#### Added
+
+- **HTTPS is required by default.** `QUEUE_WORKER_REQUIRE_HTTPS` (default `true`) rejects any request that did not arrive over HTTPS with a `426 Upgrade Required`, before the token is compared. Over plain HTTP both the shared token and the payload — a serialized application job — travel in clear. Set it to `false` only when the transport is already private: loopback on a single host, or an encrypted private network such as WireGuard. Behind a TLS-terminating proxy, `TrustProxies` must trust that proxy or every request looks insecure.
+
+#### Fixed
+
+- **The originating queue name now survives a release.** `RunEnvironmentJob` carries the queue the environment posted and passes it as `queue-consumer:run --queue=<name>`, so a job that releases itself (`WithoutOverlapping`, `RateLimited`, `$this->release()`) returns to the queue it came from instead of silently landing on `default`. It is always the posted name, never the hub-side queue, which is the operator's routing decision (#15, #16).
+
+**Full Changelog**: https://github.com/jeffersongoncalves/laravel-queue-worker/compare/1.1.1...1.2.0
+
 ## 1.1.1 - 2026-09-16
 
 ### What's Changed
