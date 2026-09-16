@@ -108,6 +108,63 @@ it('truncates a huge child output instead of storing a whole stack trace', funct
     throw new Exception('The job did not fail.');
 });
 
+it('scrubs every key of both .env files from the child environment, keeping PATH', function (): void {
+    Process::fake();
+
+    $environmentPath = sys_get_temp_dir().'/queue-worker-env-'.uniqid();
+    $hubPath = sys_get_temp_dir().'/queue-worker-hub-'.uniqid();
+
+    mkdir($environmentPath);
+    mkdir($hubPath);
+    copy(__DIR__.'/../Fixtures/environments/app-feature-1234/artisan', $environmentPath.'/artisan');
+    copy(__DIR__.'/../Fixtures/environments/app-feature-1234/composer.json', $environmentPath.'/composer.json');
+    file_put_contents($environmentPath.'/.env', "DB_HOST=10.0.0.1\nAPP_KEY=environment-key\nPATH=/environment/bin\n");
+    file_put_contents($hubPath.'/.env', "DB_HOST=hub-db\nREDIS_HOST=hub-redis\nPath=C:\\\\hub\\\\bin\n");
+
+    $this->app->setBasePath($hubPath);
+
+    makeEnvironmentJob(['path' => $environmentPath])->handle(app(PhpBinaryResolver::class));
+
+    Process::assertRan(function ($process) use (&$environment): bool {
+        $environment = $process->environment;
+
+        return true;
+    });
+
+    // Both .env files contribute their keys, each removed from the child.
+    // PATH and its Windows-style "Path" spelling are both kept.
+    expect($environment)->toBe([
+        'DB_HOST' => false,
+        'REDIS_HOST' => false,
+        'APP_KEY' => false,
+    ]);
+});
+
+it('really keeps the hub value out of the child process', function (): void {
+    $environmentPath = sys_get_temp_dir().'/queue-worker-env-'.uniqid();
+    $probe = $environmentPath.'/probe.txt';
+
+    mkdir($environmentPath);
+    copy(__DIR__.'/../Fixtures/environments/app-feature-1234/composer.json', $environmentPath.'/composer.json');
+    file_put_contents($environmentPath.'/.env', "DB_HOST=10.0.0.1\n");
+    file_put_contents(
+        $environmentPath.'/artisan',
+        '<?php file_put_contents(__DIR__."/probe.txt", var_export(getenv("DB_HOST"), true));',
+    );
+
+    // What Laravel's Dotenv adapters do with the hub's own .env values.
+    putenv('DB_HOST=hub-db');
+    $_ENV['DB_HOST'] = $_SERVER['DB_HOST'] = 'hub-db';
+    config(['queue-worker.php_binary_map' => ['8.2' => PHP_BINARY]]);
+
+    makeEnvironmentJob(['path' => $environmentPath])->handle(app(PhpBinaryResolver::class));
+
+    putenv('DB_HOST');
+    unset($_ENV['DB_HOST'], $_SERVER['DB_HOST']);
+
+    expect(file_get_contents($probe))->toBe('false');
+});
+
 it('discards the job without throwing when the environment path no longer exists', function (): void {
     Process::fake();
 

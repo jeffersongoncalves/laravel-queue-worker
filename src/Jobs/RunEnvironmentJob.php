@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace JeffersonGoncalves\QueueWorker\Jobs;
 
+use Dotenv\Dotenv;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -55,7 +56,7 @@ class RunEnvironmentJob implements ShouldQueue
 
         $phpBinary = $phpBinaryResolver->resolve($this->path);
 
-        $result = Process::path($this->path)->run([
+        $result = Process::path($this->path)->env($this->scrubbedEnvironment())->run([
             $phpBinary,
             'artisan',
             'queue-consumer:run',
@@ -91,6 +92,36 @@ class RunEnvironmentJob implements ShouldQueue
         $half = intdiv($limit - mb_strlen($marker), 2);
 
         return mb_substr($output, 0, $half).$marker.mb_substr($output, -$half);
+    }
+
+    /**
+     * Symfony inherits this process's environment, and Laravel has published
+     * the hub's own .env into it. The child bootstraps with
+     * Dotenv::createImmutable, which never overwrites what is already set, so
+     * every key the hub defines would silently beat the environment's own
+     * .env — wrong database host, nested dispatches landing in the hub's
+     * Redis, the hub's APP_KEY. Passing each of those keys as false removes
+     * it from the child environment, letting the child's own Dotenv win. The
+     * rest of the shell environment is left untouched.
+     *
+     * @return array<string, false>
+     */
+    private function scrubbedEnvironment(): array
+    {
+        $keys = [
+            ...array_keys(Dotenv::createArrayBacked(base_path())->safeLoad()),
+            ...array_keys(Dotenv::createArrayBacked($this->path)->safeLoad()),
+        ];
+
+        // PATH is the child's way of finding anything it shells out to, and
+        // Windows matches environment names case-insensitively, so a "Path"
+        // key in either file would remove it just the same.
+        $keys = array_filter(
+            array_unique($keys),
+            fn (string $key): bool => strcasecmp($key, 'PATH') !== 0,
+        );
+
+        return array_fill_keys($keys, false);
     }
 
     /**
