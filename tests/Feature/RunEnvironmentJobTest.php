@@ -119,7 +119,7 @@ it('scrubs every key of both .env files from the child environment, keeping PATH
     copy(__DIR__.'/../Fixtures/environments/app-feature-1234/artisan', $environmentPath.'/artisan');
     copy(__DIR__.'/../Fixtures/environments/app-feature-1234/composer.json', $environmentPath.'/composer.json');
     file_put_contents($environmentPath.'/.env', "DB_HOST=10.0.0.1\nAPP_KEY=environment-key\nPATH=/environment/bin\n");
-    file_put_contents($hubPath.'/.env', "DB_HOST=hub-db\nREDIS_HOST=hub-redis\n");
+    file_put_contents($hubPath.'/.env', "DB_HOST=hub-db\nREDIS_HOST=hub-redis\nPath=C:\\\\hub\\\\bin\n");
 
     $this->app->setBasePath($hubPath);
 
@@ -132,6 +132,7 @@ it('scrubs every key of both .env files from the child environment, keeping PATH
     });
 
     // Both .env files contribute their keys, each removed from the child.
+    // PATH and its Windows-style "Path" spelling are both kept.
     expect($environment)->toBe([
         'DB_HOST' => false,
         'REDIS_HOST' => false,

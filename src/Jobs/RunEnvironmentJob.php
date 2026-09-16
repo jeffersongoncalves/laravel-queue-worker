@@ -113,8 +113,15 @@ class RunEnvironmentJob implements ShouldQueue
             ...array_keys(Dotenv::createArrayBacked($this->path)->safeLoad()),
         ];
 
-        // PATH is the child's way of finding anything it shells out to.
-        return array_fill_keys(array_diff(array_unique($keys), ['PATH']), false);
+        // PATH is the child's way of finding anything it shells out to, and
+        // Windows matches environment names case-insensitively, so a "Path"
+        // key in either file would remove it just the same.
+        $keys = array_filter(
+            array_unique($keys),
+            fn (string $key): bool => strcasecmp($key, 'PATH') !== 0,
+        );
+
+        return array_fill_keys($keys, false);
     }
 
     /**
