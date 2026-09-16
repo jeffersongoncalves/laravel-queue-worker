@@ -109,6 +109,8 @@ Otherwise terminate TLS in front of the hub (an internal CA is enough; mTLS if y
 
 The child process runs with the timeout the originating job declared (`timeout` on the payload, default `60`), and the hub-side `RunEnvironmentJob` gets that value plus a 60-second margin. The margin matters: both numbers come from the same payload field, so without it they expire together and it is a coin toss which fires first. The child timing out first is the path worth having — Symfony kills it, the job fails with a `ProcessTimedOutException`, and the `failed_jobs` row names the environment. The other way round, the worker's `pcntl_alarm` kills the hub job mid-run, leaving an orphan child process and `has been attempted too many times or run too long` as the only clue.
 
+A job that was already queued before this version takes the margin out of the child's share instead, since the worker's alarm reads the timeout off the outer queue payload, written at dispatch and no longer rewritable. Below 60 seconds there is no room to take and the two expire together, exactly as they did before the upgrade.
+
 Two hub-side knobs still cap the chain and cannot be derived per job, so set them above the longest timeout any environment declares:
 
 - the Horizon supervisor's `timeout` in `config/horizon.php` — only a fallback, since `Worker::timeoutForJob()` prefers the job's own `$timeout`;

@@ -205,6 +205,33 @@ it('gives the child process the timeout the payload declared, not the framework 
     Process::assertRan(fn ($process): bool => $process->timeout === 900);
 });
 
+it('takes the margin out of the child share for a job queued before childTimeout existed', function (): void {
+    Process::fake();
+
+    // What unserializing a pre-upgrade payload leaves behind: $timeout holds
+    // the value the payload declared (and the worker's alarm uses that same
+    // value off the outer queue payload), $childTimeout falls back to its default.
+    $job = makeEnvironmentJob();
+    $job->childTimeout = 0;
+    $job->timeout = 300;
+
+    $job->handle(app(PhpBinaryResolver::class));
+
+    Process::assertRan(fn ($process): bool => $process->timeout === 240);
+});
+
+it('leaves a legacy timeout with no room to spare alone rather than strangling the child', function (): void {
+    Process::fake();
+
+    $job = makeEnvironmentJob();
+    $job->childTimeout = 0;
+    $job->timeout = 60;
+
+    $job->handle(app(PhpBinaryResolver::class));
+
+    Process::assertRan(fn ($process): bool => $process->timeout === 60);
+});
+
 it('outlives the child it supervises, so the child is the one that times out first', function (): void {
     $job = makeEnvironmentJob(['timeout' => 900]);
 

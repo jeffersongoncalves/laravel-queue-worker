@@ -37,10 +37,12 @@ class RunEnvironmentJob implements ShouldQueue
 
     /**
      * The timeout the environment declared on its own job, applied to the
-     * child process. Carries a default for the same reason $originalQueue
-     * does: a job serialized by an older version must still unserialize.
+     * child process. The constructor always sets it above zero, so the zero
+     * default marks a job serialized before this property existed — those
+     * still unserialize, and childProcessTimeout() derives their child
+     * timeout from $timeout instead.
      */
-    public int $childTimeout = 60;
+    public int $childTimeout = 0;
 
     /**
      * The queue the environment posted, which is what a released job must
@@ -87,7 +89,7 @@ class RunEnvironmentJob implements ShouldQueue
         $phpBinary = $phpBinaryResolver->resolve($this->path);
 
         $result = Process::path($this->path)
-            ->timeout($this->childTimeout)
+            ->timeout($this->childProcessTimeout())
             ->env($this->scrubbedEnvironment())
             ->run([
                 $phpBinary,
@@ -107,6 +109,30 @@ class RunEnvironmentJob implements ShouldQueue
                 "Child process for environment [{$this->slug}] exited with code [{$result->exitCode()}]: {$details}"
             );
         }
+    }
+
+    /**
+     * How long the child may run. Normally $childTimeout, which the
+     * constructor set from the payload and which $timeout already exceeds by
+     * TIMEOUT_MARGIN.
+     *
+     * A job queued before $childTimeout existed carries no value for it, and
+     * the worker's pcntl_alarm reads the timeout off the *outer* queue payload
+     * written at dispatch — which nothing here can rewrite, since that payload
+     * is already in Redis. What it can do is take the margin out of the child's
+     * share instead, so the child still dies first. Below the margin there is
+     * no room to take, and the two expire together exactly as they did before
+     * the upgrade.
+     */
+    private function childProcessTimeout(): int
+    {
+        if ($this->childTimeout > 0) {
+            return $this->childTimeout;
+        }
+
+        return $this->timeout > self::TIMEOUT_MARGIN
+            ? $this->timeout - self::TIMEOUT_MARGIN
+            : $this->timeout;
     }
 
     /**
