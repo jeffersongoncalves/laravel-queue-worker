@@ -25,6 +25,16 @@ class RunEnvironmentJob implements ShouldQueue
 
     public int $timeout;
 
+    /**
+     * The queue the environment posted, which is what a released job must
+     * return to. Distinct from $queue, the hub-side queue this job runs on:
+     * with queue-worker.queue set the two differ on purpose.
+     *
+     * It carries a default so a job serialized by an older version of this
+     * package still unserializes after an upgrade.
+     */
+    public string $originalQueue = 'default';
+
     public function __construct(
         public readonly string $slug,
         public readonly string $path,
@@ -33,9 +43,11 @@ class RunEnvironmentJob implements ShouldQueue
         public readonly string $displayName,
         int $maxTries,
         int $timeout,
+        string $originalQueue = 'default',
     ) {
         $this->tries = max(1, $maxTries);
         $this->timeout = max(1, $timeout);
+        $this->originalQueue = $originalQueue;
     }
 
     public function handle(PhpBinaryResolver $phpBinaryResolver): void
@@ -61,6 +73,7 @@ class RunEnvironmentJob implements ShouldQueue
             'artisan',
             'queue-consumer:run',
             '--payload='.base64_encode($this->payload),
+            '--queue='.$this->originalQueue,
             ...($this->attempts() >= $this->tries ? ['--last-attempt'] : []),
         ]);
 

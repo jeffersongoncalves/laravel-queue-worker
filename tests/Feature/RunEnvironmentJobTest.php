@@ -22,6 +22,7 @@ function makeEnvironmentJob(array $overrides = []): RunEnvironmentJob
         'displayName' => 'App\\Jobs\\GenerateInvoice',
         'maxTries' => 3,
         'timeout' => 1800,
+        'originalQueue' => 'default',
     ], $overrides);
 
     return new RunEnvironmentJob(
@@ -32,6 +33,7 @@ function makeEnvironmentJob(array $overrides = []): RunEnvironmentJob
         displayName: $data['displayName'],
         maxTries: $data['maxTries'],
         timeout: $data['timeout'],
+        originalQueue: $data['originalQueue'],
     );
 }
 
@@ -47,8 +49,18 @@ it('runs the child process inside the environment path with the base64-encoded p
     $job->handle(app(PhpBinaryResolver::class));
 
     Process::assertRan(fn ($process): bool => $process->command === [
-        'php', 'artisan', 'queue-consumer:run', '--payload='.base64_encode($job->payload),
+        'php', 'artisan', 'queue-consumer:run', '--payload='.base64_encode($job->payload), '--queue=default',
     ]);
+});
+
+it('forwards the originating queue name so a released job returns to it', function (): void {
+    Process::fake();
+
+    $job = makeEnvironmentJob(['originalQueue' => 'emails']);
+
+    $job->handle(app(PhpBinaryResolver::class));
+
+    Process::assertRan(fn ($process): bool => in_array('--queue=emails', $process->command, true));
 });
 
 it('passes --last-attempt once the job has reached its final try', function (): void {

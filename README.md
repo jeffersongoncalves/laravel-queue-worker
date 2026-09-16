@@ -18,6 +18,8 @@ Receive Laravel queue job payloads over HTTP from many ephemeral review environm
 
 This is the **hub-side** counterpart to [`jeffersongoncalves/laravel-queue-consumer`](https://github.com/jeffersongoncalves/laravel-queue-consumer). At least one environment running that package is required to send this package any jobs — installing this package alone receives nothing on its own.
 
+> **Requires `laravel-queue-consumer` 1.2.0 or newer on the environment side.** From 1.2.0 this package passes `--queue=` to `queue-consumer:run`, an option older consumers do not accept.
+
 ## How it works
 
 Dozens of ephemeral review environments (one Laravel application per git branch, spun up and torn down by CI, each with its own `vendor/`, `.env`, and its own version of the application code) run `laravel-queue-consumer`, which POSTs job payloads here instead of running a local queue worker.
@@ -56,6 +58,8 @@ return [
 
     'queue' => env('QUEUE_WORKER_QUEUE'),
 
+    'require_https' => env('QUEUE_WORKER_REQUIRE_HTTPS', true),
+
     'route_prefix' => env('QUEUE_WORKER_ROUTE_PREFIX', 'api'),
 
     'route_middleware' => ['api'],
@@ -76,6 +80,7 @@ return [
 QUEUE_WORKER_TOKEN=some-shared-secret-token
 QUEUE_WORKER_ALLOWED_ROOT=/srv/environments
 QUEUE_WORKER_QUEUE=environments
+QUEUE_WORKER_REQUIRE_HTTPS=true
 QUEUE_WORKER_DEDUP_WINDOW_HOURS=24
 ```
 
@@ -86,6 +91,17 @@ QUEUE_WORKER_DEDUP_WINDOW_HOURS=24
 The hub itself should live **outside** `allowed_root`. If it doesn't (hub at `/srv/environments/hub`, environments at `/srv/environments/<slug>`), a request pointing at the hub's own directory passes every other check; the package rejects it explicitly with `422` rather than queueing a job that runs `queue-consumer:run` inside the hub and fails later.
 
 **`QUEUE_WORKER_QUEUE` decides which hub-side queue every job lands on.** Left unset, the hub reuses the queue name posted by the environment — and since that name comes from applications the hub operator does not control, a job posted to a queue no Horizon supervisor watches is stored and never consumed: `202` to the consumer, no failed job, nothing on the dashboard. Set it to a queue your supervisor actually watches and every incoming job is forced onto it. This is safe: the hub-side queue only decides which hub worker picks up `RunEnvironmentJob`; the payload is forwarded untouched and carries the job's own queue name for the environment side.
+
+**`QUEUE_WORKER_REQUIRE_HTTPS` defaults to `true`** and rejects any request that did not arrive over HTTPS with a `426 Upgrade Required`, before the token is even compared. The token and the payload both travel in clear over plain HTTP, and the payload is a serialized job — usually your application's own data.
+
+Turn it off **only** when the transport is already private:
+
+- hub and environments on the same host, posting to `http://127.0.0.1` — no network, nothing to intercept;
+- an encrypted private network (WireGuard, Tailscale, an SSH tunnel), which is usually the easiest option for ephemeral review environments, since issuing a certificate per environment is friction CI does not need.
+
+Otherwise terminate TLS in front of the hub (an internal CA is enough; mTLS if you also want to authenticate the environment).
+
+> **Behind a TLS-terminating proxy**, `$request->secure()` is only `true` once Laravel's `TrustProxies` middleware trusts that proxy (`TRUSTED_PROXIES`). Without it a correctly configured HTTPS setup is rejected with `426`.
 
 `php_binary_map` maps an environment's own `composer.json` `require.php` constraint (major.minor, e.g. `8.2` from `^8.2`) to a concrete PHP binary on the host running this package. There is no fallback to this hub's own `php` binary: an environment whose PHP version isn't mapped causes the job to throw loudly, rather than silently running someone else's job under the wrong PHP version.
 
@@ -120,7 +136,9 @@ The combined output is truncated to 4000 characters, keeping the head (the rende
 }
 ```
 
-`queue` is the hub-side queue the job is placed on, unless `QUEUE_WORKER_QUEUE` is configured, which overrides it. `delay` is honored as posted. Both are hub-side scheduling only — the job's own queue name lives inside `payload` and is what the environment sees when it runs.
+`queue` is the hub-side queue the job is placed on, unless `QUEUE_WORKER_QUEUE` is configured, which overrides it. `delay` is honored as posted.
+
+The posted `queue` also travels with the job and is passed to the environment as `queue-consumer:run --queue=<name>`, so a job that releases itself (`WithoutOverlapping`, `RateLimited`, a plain `$this->release()`) is re-posted to the hub announcing the queue it came from instead of silently changing lane. This is always the **posted** name, never the hub-side one: the hub-side queue is the operator's routing decision, the posted name carries the originating application's semantics.
 
 A successful response is `202` with `{"id": "<hub job id>"}` (the `uuid` read off the payload). Delivery is at-least-once: the consumer package may resend an identical request if it loses the response, so this package deduplicates by the payload's `uuid` for `dedup_window_hours` (default 24h).
 
@@ -142,7 +160,7 @@ Please see [CONTRIBUTING](.github/CONTRIBUTING.md) for details.
 
 ## Security Vulnerabilities
 
-**This package is for internal, trusted review environments only.** It must never be exposed to the public internet and must never run in production. `allowed_root` and the token are the only things standing between an HTTP request and arbitrary process execution on the host running this package — treat both accordingly. Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
+**This package is for internal, trusted review environments only.** It must never be exposed to the public internet and must never run in production. `allowed_root`, the token and the transport are the only things standing between an HTTP request and arbitrary process execution on the host running this package — treat all three accordingly, and leave `QUEUE_WORKER_REQUIRE_HTTPS` on unless the network is already private. Please review [our security policy](../../security/policy) on how to report security vulnerabilities.
 
 ## Limitations
 

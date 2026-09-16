@@ -28,6 +28,8 @@ class TestCase extends Orchestra
         $app['config']->set('cache.default', 'array');
 
         $app['config']->set('queue-worker.token', 'test-token');
+        // The test requests are plain HTTP; the guard has its own tests.
+        $app['config']->set('queue-worker.require_https', false);
         $app['config']->set('queue-worker.allowed_root', __DIR__.'/Fixtures/environments');
     }
 }
