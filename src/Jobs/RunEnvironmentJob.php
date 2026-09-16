@@ -21,9 +21,32 @@ class RunEnvironmentJob implements ShouldQueue
     use InteractsWithQueue;
     use Queueable;
 
+    /**
+     * How much longer this job may live than the child it supervises. Both
+     * numbers come from the same payload field, so without a margin they
+     * expire together and it is a coin toss which fires first. The child
+     * timing out first is the path worth having: Symfony kills it and the
+     * failed_jobs row names the environment. The other way round, the
+     * worker's pcntl_alarm kills this job mid-run, leaving an orphan child.
+     *
+     * Public because the controller has to know what a posted timeout grows
+     * into before it dispatches anything: that total, not the posted value,
+     * is what has to stay under the connection's retry_after.
+     */
+    public const TIMEOUT_MARGIN = 60;
+
     public int $tries;
 
     public int $timeout;
+
+    /**
+     * The timeout the environment declared on its own job, applied to the
+     * child process. The constructor always sets it above zero, so the zero
+     * default marks a job serialized before this property existed — those
+     * still unserialize, and childProcessTimeout() derives their child
+     * timeout from $timeout instead.
+     */
+    public int $childTimeout = 0;
 
     /**
      * The queue the environment posted, which is what a released job must
@@ -46,7 +69,8 @@ class RunEnvironmentJob implements ShouldQueue
         string $originalQueue = 'default',
     ) {
         $this->tries = max(1, $maxTries);
-        $this->timeout = max(1, $timeout);
+        $this->childTimeout = max(1, $timeout);
+        $this->timeout = $this->childTimeout + self::TIMEOUT_MARGIN;
         $this->originalQueue = $originalQueue;
     }
 
@@ -68,14 +92,17 @@ class RunEnvironmentJob implements ShouldQueue
 
         $phpBinary = $phpBinaryResolver->resolve($this->path);
 
-        $result = Process::path($this->path)->env($this->scrubbedEnvironment())->run([
-            $phpBinary,
-            'artisan',
-            'queue-consumer:run',
-            '--payload='.base64_encode($this->payload),
-            '--queue='.$this->originalQueue,
-            ...($this->attempts() >= $this->tries ? ['--last-attempt'] : []),
-        ]);
+        $result = Process::path($this->path)
+            ->timeout($this->childProcessTimeout())
+            ->env($this->scrubbedEnvironment())
+            ->run([
+                $phpBinary,
+                'artisan',
+                'queue-consumer:run',
+                '--payload='.base64_encode($this->payload),
+                '--queue='.$this->originalQueue,
+                ...($this->attempts() >= $this->tries ? ['--last-attempt'] : []),
+            ]);
 
         if ($result->failed()) {
             // Laravel renders the child's exception through its console handler,
@@ -86,6 +113,32 @@ class RunEnvironmentJob implements ShouldQueue
                 "Child process for environment [{$this->slug}] exited with code [{$result->exitCode()}]: {$details}"
             );
         }
+    }
+
+    /**
+     * How long the child may run. Normally $childTimeout, which the
+     * constructor set from the payload and which $timeout already exceeds by
+     * TIMEOUT_MARGIN.
+     *
+     * A job queued before $childTimeout existed carries no value for it, and
+     * the worker's pcntl_alarm reads the timeout off the *outer* queue payload
+     * written at dispatch — which nothing here can rewrite, since that payload
+     * is already in Redis. What it can do is take the margin out of the child's
+     * share instead, so the child still dies first. Below the margin there is
+     * not a whole margin to take, and one second is reserved instead — a
+     * second off the child's budget buys the same ordering. At a one-second
+     * timeout even that is gone, since no smaller positive value exists, and
+     * the two expire together exactly as they did before the upgrade.
+     */
+    private function childProcessTimeout(): int
+    {
+        if ($this->childTimeout > 0) {
+            return $this->childTimeout;
+        }
+
+        $reserved = $this->timeout > self::TIMEOUT_MARGIN ? self::TIMEOUT_MARGIN : 1;
+
+        return max(1, $this->timeout - $reserved);
     }
 
     /**

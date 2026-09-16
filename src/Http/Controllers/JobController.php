@@ -41,6 +41,21 @@ class JobController
             throw ValidationException::withMessages(['payload' => ['The payload is not valid JSON.']]);
         }
 
+        // Laravel reads a zero timeout as "no timeout" (pcntl_alarm(0) cancels
+        // the alarm), which the hub cannot honor: the child would hold a worker
+        // indefinitely and retry_after would reclaim and duplicate the job while
+        // it still runs. A negative one is invalid to Symfony Process outright.
+        // Neither can be quietly clamped, since max(1, $timeout) would run a job
+        // that declared no limit for one second, so both are rejected here.
+        if ($metadata->timeout < 1) {
+            throw ValidationException::withMessages(['payload' => [
+                'The payload timeout must be at least 1 second. The hub supervises every job with a '
+                .'process timeout, so it cannot run a job that declares no limit.',
+            ]]);
+        }
+
+        $this->assertFitsWithinRetryAfter($metadata->timeout);
+
         $override = config('queue-worker.queue');
 
         // The posted name belongs to the originating application and travels
@@ -64,5 +79,40 @@ class JobController
         )->onQueue($queue)->delay((int) ($data['delay'] ?? 0));
 
         return response()->json(['id' => $metadata->uuid], 202);
+    }
+
+    /**
+     * A queue connection hands a reserved job back to another worker once
+     * retry_after seconds pass, without asking whether the first one is still
+     * running. The hub job lives for the posted timeout plus the margin, so
+     * anything at or above retry_after is delivered twice and the environment
+     * runs the same job concurrently — at-least-once turning into
+     * at-least-twice, silently, with no failed job to read afterwards.
+     *
+     * The bound is read off the connection rather than configured separately,
+     * so there is one number to keep right instead of two that can drift. A
+     * connection without retry_after (sync, sqs, which carries its own
+     * visibility timeout) has nothing to compare against and is left alone.
+     */
+    private function assertFitsWithinRetryAfter(int $timeout): void
+    {
+        $connection = config('queue.default');
+        $retryAfter = config("queue.connections.{$connection}.retry_after");
+
+        if (! is_numeric($retryAfter)) {
+            return;
+        }
+
+        $jobTimeout = $timeout + RunEnvironmentJob::TIMEOUT_MARGIN;
+
+        if ($jobTimeout < (int) $retryAfter) {
+            return;
+        }
+
+        throw ValidationException::withMessages(['payload' => [
+            "The payload timeout of {$timeout} seconds becomes a {$jobTimeout} second hub job, which the "
+            ."[{$connection}] connection would reclaim and run a second time after {$retryAfter} seconds. "
+            .'Raise retry_after on that connection above the longest timeout any environment declares.',
+        ]]);
     }
 }

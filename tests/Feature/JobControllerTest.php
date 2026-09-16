@@ -46,7 +46,7 @@ it('accepts a valid request, queues the job, and responds 202 with the hub job i
         expect($job->uuid)->toBe($decoded['uuid']);
         expect($job->displayName)->toBe($decoded['displayName']);
         expect($job->tries)->toBe(5);
-        expect($job->timeout)->toBe(900);
+        expect($job->childTimeout)->toBe(900);
 
         return true;
     });
@@ -127,6 +127,95 @@ it('rejects a request pointing at the hub own directory and never dispatches a j
     Bus::assertNothingDispatched();
 });
 
+it('rejects a payload declaring no timeout instead of running it for one second', function (): void {
+    Bus::fake();
+
+    $response = $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 0]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token']);
+
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors('payload');
+
+    Bus::assertNothingDispatched();
+});
+
+it('rejects a negative payload timeout, which Symfony Process refuses outright', function (): void {
+    Bus::fake();
+
+    $response = $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => -30]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token']);
+
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors('payload');
+
+    Bus::assertNothingDispatched();
+});
+
+it('still accepts a payload that omits the timeout, falling back to the default', function (): void {
+    Bus::fake();
+
+    $payload = PayloadFactory::make();
+    $decoded = json_decode($payload, true, flags: JSON_THROW_ON_ERROR);
+    unset($decoded['timeout']);
+
+    $this->postJson('/api/jobs', validJobRequest([
+        'payload' => json_encode($decoded, JSON_THROW_ON_ERROR),
+    ]), ['X-Laravel-Queue-Token' => 'test-token'])->assertStatus(202);
+
+    Bus::assertDispatched(fn (RunEnvironmentJob $job): bool => $job->childTimeout === 60);
+});
+
+it('rejects a payload whose hub job would outlive retry_after and be run twice', function (): void {
+    Bus::fake();
+    config(['queue.default' => 'redis', 'queue.connections.redis.retry_after' => 90]);
+
+    $response = $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 300]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token']);
+
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors('payload');
+
+    Bus::assertNothingDispatched();
+});
+
+it('accepts the same payload once retry_after leaves room for the margin', function (): void {
+    Bus::fake();
+    config(['queue.default' => 'redis', 'queue.connections.redis.retry_after' => 3600]);
+
+    $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 300]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token'])->assertStatus(202);
+
+    Bus::assertDispatched(fn (RunEnvironmentJob $job): bool => $job->childTimeout === 300);
+});
+
+it('rejects a hub job that would expire on the very second retry_after does', function (): void {
+    Bus::fake();
+    config(['queue.default' => 'redis', 'queue.connections.redis.retry_after' => 360]);
+
+    // 300 + the 60 second margin lands exactly on retry_after, which is already
+    // a race rather than a bound.
+    $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 300]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token'])->assertStatus(422);
+
+    Bus::assertNothingDispatched();
+});
+
+it('leaves a connection without retry_after alone, having nothing to compare against', function (): void {
+    Bus::fake();
+    config(['queue.default' => 'sync']);
+
+    $this->postJson('/api/jobs', validJobRequest([
+        'payload' => PayloadFactory::make(['timeout' => 86400]),
+    ]), ['X-Laravel-Queue-Token' => 'test-token'])->assertStatus(202);
+
+    Bus::assertDispatched(RunEnvironmentJob::class);
+});
+
 it('derives tries and timeout per request instead of a hardcoded constant', function (): void {
     Bus::fake();
 
@@ -140,11 +229,11 @@ it('derives tries and timeout per request instead of a hardcoded constant', func
 
     Bus::assertDispatched(
         RunEnvironmentJob::class,
-        fn (RunEnvironmentJob $job): bool => $job->uuid === 'job-a' && $job->tries === 2 && $job->timeout === 300,
+        fn (RunEnvironmentJob $job): bool => $job->uuid === 'job-a' && $job->tries === 2 && $job->childTimeout === 300,
     );
     Bus::assertDispatched(
         RunEnvironmentJob::class,
-        fn (RunEnvironmentJob $job): bool => $job->uuid === 'job-b' && $job->tries === 7 && $job->timeout === 3600,
+        fn (RunEnvironmentJob $job): bool => $job->uuid === 'job-b' && $job->tries === 7 && $job->childTimeout === 3600,
     );
 });
 
